@@ -5,7 +5,7 @@ import uvicorn
 
 SHOW_LOG = True
 
-app = FastAPI(title="RandomForest API для CICIDS2017")
+app = FastAPI()
 
 # Эндпоинты FastAPI
 @app.post("/train/")
@@ -29,4 +29,4 @@ async def predict_model(mode: str, file: UploadFile = None):
         raise HTTPException(status_code=400, detail="Неверные параметры запроса")
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="192.168.1.77", port=8000, reload=True)
+    uvicorn.run("main:app", host="192.168.1.77", port=8000, reload=True)
