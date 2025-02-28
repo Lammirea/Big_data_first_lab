@@ -7,7 +7,6 @@ SHOW_LOG = True
 
 app = FastAPI()
 
-# Эндпоинты FastAPI
 @app.post("/train/")
 async def train_model(
     use_config: bool = False,
@@ -29,4 +28,11 @@ async def predict_model(mode: str, file: UploadFile = None):
         raise HTTPException(status_code=400, detail="Неверные параметры запроса")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="192.168.1.77", port=8000, reload=True)
+    config = configparser.ConfigParser()
+    config.read("../config.ini")  # Читаем config.ini из корневой папки
+    try:
+        host = config["FASTAPI"]["host"]
+        port = config.getint("FASTAPI", "port")
+    except KeyError:
+        raise ValueError("В config.ini отсутствует секция [FASTAPI] или ключи host/port")
+    uvicorn.run(app, host=host, port=port)
