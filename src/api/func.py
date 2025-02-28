@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from logger import Logger  # Предполагается наличие модуля logger.py
+from logger import Logger
 import io
 import os
 import configparser
