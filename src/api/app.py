@@ -35,4 +35,4 @@ async def predict_endpoint(mode: str = "smoke", file: UploadFile = File(None)):
     return result
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="192.168.1.77", port=8000, reload=True)
