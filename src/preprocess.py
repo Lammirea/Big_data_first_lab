@@ -5,21 +5,20 @@ import sys
 import traceback
 import pickle
 
-from catboost import CatBoostClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from logger import Logger
 
 SHOW_LOG = True
 
-class CatBoostClassifierTrainer:
+class RandomForestClassifierTrainer:
     def __init__(self) -> None:
         logger = Logger(SHOW_LOG)
         self.log = logger.get_logger(__name__)
         self.config = configparser.ConfigParser()
         self.config.read("config.ini")
         
-
         try:
             split_data = self.config["SPLIT_DATA"]
             self.X_train_path = split_data["X_train"]
@@ -43,34 +42,34 @@ class CatBoostClassifierTrainer:
         self.project_path = os.path.join(os.getcwd(), "experiments")
         if not os.path.exists(self.project_path):
             os.makedirs(self.project_path)
-        self.model_path = os.path.join(self.project_path, "catboost_model.sav")
-        self.log.info("CatBoostClassifierTrainer is ready")
+        self.model_path = os.path.join(self.project_path, "random_forest_model.sav")
+        self.log.info("RandomForestClassifierTrainer is ready")
 
-    def train_model(self, use_config: bool = False, iterations: int = 1000, depth: int = 6, learning_rate: float = 0.1, predict: bool = False) -> bool:
+    def train_model(self, use_config: bool = False, n_estimators: int = 100, max_depth: int = None, 
+                   min_samples_split: int = 2, predict: bool = False) -> bool:
         """
-        Обучает модель CatBoostClassifier.
+        Обучает модель RandomForestClassifier.
         
-        Если use_config=True, параметры берутся из секции [CATBOOST] файла config.ini.
+        Если use_config=True, параметры берутся из секции [RANDOM_FOREST] файла config.ini.
         Если predict=True, выводятся метрики на тестовой выборке.
         """
         if use_config:
             try:
-                iterations = self.config.getint("CATBOOST", "iterations")
-                depth = self.config.getint("CATBOOST", "depth")
-                learning_rate = self.config.getfloat("CATBOOST", "learning_rate")
+                n_estimators = self.config.getint("RANDOM_FOREST", "n_estimators")
+                max_depth = self.config.getint("RANDOM_FOREST", "max_depth", fallback=None)
+                min_samples_split = self.config.getint("RANDOM_FOREST", "min_samples_split")
             except KeyError:
-                self.log.warning("Параметры для CatBoost не найдены в config.ini, используются переданные значения.")
+                self.log.warning("Параметры для RandomForest не найдены в config.ini, используются переданные значения.")
         
         # Инициализация и обучение модели
-        classifier = CatBoostClassifier(
-            iterations=iterations,
-            depth=depth,
-            learning_rate=learning_rate,
-            verbose=0,
+        classifier = RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
             random_state=42
         )
         try:
-            classifier.fit(self.X_train, self.y_train)
+            classifier.fit(self.X_train, self.y_train.values.ravel())  # .values.ravel() для преобразования y_train
         except Exception:
             self.log.error(traceback.format_exc())
             sys.exit(1)
@@ -88,12 +87,12 @@ class CatBoostClassifierTrainer:
                 self.log.error(traceback.format_exc())
         
         params = {
-            'iterations': iterations,
-            'depth': depth,
-            'learning_rate': learning_rate,
+            'n_estimators': n_estimators,
+            'max_depth': str(max_depth),  # Преобразуем в строку для корректной записи None
+            'min_samples_split': min_samples_split,
             'model_path': self.model_path
         }
-        return self.save_model(classifier, self.model_path, "CATBOOST", params)
+        return self.save_model(classifier, self.model_path, "RANDOM_FOREST", params)
 
     def save_model(self, classifier, path: str, section: str, params: dict) -> bool:
         """
@@ -121,5 +120,5 @@ class CatBoostClassifierTrainer:
         return os.path.isfile(path)
 
 if __name__ == "__main__":
-    trainer = CatBoostClassifierTrainer()
+    trainer = RandomForestClassifierTrainer()
     trainer.train_model(use_config=False, predict=True)

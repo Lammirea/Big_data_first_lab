@@ -24,7 +24,7 @@ class Predictor:
         self.log = logger.get_logger(__name__)
         self.config.read("config.ini")
         self.parser = argparse.ArgumentParser(
-            description="CatBoostClassifier Predictor for Anomaly Traffic"
+            description="RandomForestClassifier Predictor for Anomaly Traffic"
         )
         self.parser.add_argument(
             "-m",
@@ -32,10 +32,10 @@ class Predictor:
             type=str,
             help="Select model",
             required=True,
-            default="CATBOOST",
-            const="CATBOOST",
+            default="RANDOM_FOREST",
+            const="RANDOM_FOREST",
             nargs="?",
-            choices=["CATBOOST"]
+            choices=["RANDOM_FOREST"]
         )
         self.parser.add_argument(
             "-t",
@@ -58,7 +58,7 @@ class Predictor:
             self.log.error("Ошибка загрузки данных из config.ini: " + str(e))
             sys.exit(1)
 
-        # Для CatBoost масштабирование не обязательно, но оставляем для единообразия
+        # Для RandomForest масштабирование не обязательно, но оставляем для единообразия
         self.sc = StandardScaler()
         self.X_train = self.sc.fit_transform(self.X_train)
         self.X_test = self.sc.transform(self.X_test)
@@ -67,7 +67,7 @@ class Predictor:
     def predict(self) -> bool:
         args = self.parser.parse_args()
         try:
-            model_section = args.model  # Ожидается "CATBOOST"
+            model_section = args.model  # Ожидается "RANDOM_FOREST"
             model_path = self.config[model_section]["path"]
             classifier = pickle.load(open(model_path, "rb"))
         except Exception:

@@ -1,24 +1,25 @@
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
-
-from logger import Logger  # Модуль logger.py должен реализовывать класс Logger
+from sklearn.ensemble import RandomForestClassifier
+from logger import Logger  # Предполагается наличие модуля logger.py
 import io
 import os
 import configparser
 import pickle
 import traceback
-from fastapi import HTTPException
 import pandas as pd
-from catboost import CatBoostClassifier
 
 SHOW_LOG = True
 
-def train_model_func(use_config: bool, iterations: int, depth: int, learning_rate: float, predict_flag: bool):
+app = FastAPI()
+
+def train_model_func(use_config: bool, n_estimators: int, max_depth: int, min_samples_split: int, predict_flag: bool):
     """
-    Обучение модели по логике train.py.
+    Обучение модели RandomForestClassifier.
     Читаются пути к данным из config.ini (раздел SPLIT_DATA), выполняется масштабирование,
-    обучается модель CatBoostClassifier, при predict_flag вычисляется accuracy на тестовой выборке.
-    Затем модель сохраняется, а в config.ini обновляются параметры в секции CATBOOST.
+    обучается модель, при predict_flag вычисляется accuracy на тестовой выборке.
+    Затем модель сохраняется, а в config.ini обновляются параметры в секции RANDOM_FOREST.
     """
     logger = Logger(SHOW_LOG)
     log = logger.get_logger(__name__)
@@ -36,7 +37,7 @@ def train_model_func(use_config: bool, iterations: int, depth: int, learning_rat
         log.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Ошибка загрузки данных из config.ini")
     
-    # Масштабирование
+    # Масштабирование (опционально для RandomForest, но оставлено для совместимости)
     sc = StandardScaler()
     X_train_scaled = sc.fit_transform(X_train)
     X_test_scaled = sc.transform(X_test)
@@ -44,23 +45,22 @@ def train_model_func(use_config: bool, iterations: int, depth: int, learning_rat
     # При использовании параметров из config.ini (use_config=True)
     if use_config:
         try:
-            iterations = config.getint("CATBOOST", "iterations")
-            depth = config.getint("CATBOOST", "depth")
-            learning_rate = config.getfloat("CATBOOST", "learning_rate")
+            n_estimators = config.getint("RANDOM_FOREST", "n_estimators")
+            max_depth = config.getint("RANDOM_FOREST", "max_depth", fallback=None)
+            min_samples_split = config.getint("RANDOM_FOREST", "min_samples_split")
         except KeyError:
             log.error(traceback.format_exc())
-            log.warning("Параметры для CatBoost не найдены в config.ini. Используются переданные значения.")
+            log.warning("Параметры для RandomForest не найдены в config.ini. Используются переданные значения.")
     
     # Инициализация и обучение модели
-    classifier = CatBoostClassifier(
-        iterations=iterations,
-        depth=depth,
-        learning_rate=learning_rate,
-        verbose=0,
+    classifier = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
         random_state=42
     )
     try:
-        classifier.fit(X_train_scaled, y_train)
+        classifier.fit(X_train_scaled, y_train.values.ravel())  # .values.ravel() для преобразования y_train
     except Exception:
         log.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Ошибка обучения модели")
@@ -78,20 +78,20 @@ def train_model_func(use_config: bool, iterations: int, depth: int, learning_rat
     project_path = os.path.join(os.getcwd(), "experiments")
     if not os.path.exists(project_path):
         os.makedirs(project_path)
-    catboost_path = os.path.join(project_path, "catboost_model.sav")
+    rf_path = os.path.join(project_path, "random_forest_model.sav")
     
     # Параметры обученной модели
     params = {
-        'iterations': iterations,
-        'depth': depth,
-        'learning_rate': learning_rate,
-        'path': catboost_path
+        'n_estimators': n_estimators,
+        'max_depth': str(max_depth),  # Преобразуем в строку для корректной записи None
+        'min_samples_split': min_samples_split,
+        'path': rf_path
     }
     
-    # Обновляем/добавляем секцию CATBOOST в config.ini
-    config["CATBOOST"] = {}
+    # Обновляем/добавляем секцию RANDOM_FOREST в config.ini
+    config["RANDOM_FOREST"] = {}
     for key, value in params.items():
-        config["CATBOOST"][key] = str(value)
+        config["RANDOM_FOREST"][key] = str(value)
     try:
         os.remove("config.ini")
     except Exception:
@@ -101,21 +101,20 @@ def train_model_func(use_config: bool, iterations: int, depth: int, learning_rat
         
     # Сохранение модели через pickle
     try:
-        with open(catboost_path, "wb") as f:
+        with open(rf_path, "wb") as f:
             pickle.dump(classifier, f)
     except Exception:
         log.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Ошибка сохранения модели")
     
-    log.info(f"Модель сохранена по пути: {catboost_path}")
-    return {"model_saved": os.path.isfile(catboost_path), "test_accuracy": test_accuracy}
+    log.info(f"Модель сохранена по пути: {rf_path}")
+    return {"model_saved": os.path.isfile(rf_path), "test_accuracy": test_accuracy}
 
 def predict_model_func(mode: str, file_contents: bytes = None):
     """
-    Предсказание по логике predict.py.
-    Если mode=='smoke', то данные для тестирования берутся из config.ini (раздел SPLIT_DATA).
-    Если mode=='upload', то используется загруженный CSV-файл.
-    Для масштабирования во всех случаях применяется StandardScaler, обученный на X_train из config.ini.
+    Предсказание с использованием RandomForestClassifier.
+    Если mode=='smoke', данные для тестирования берутся из config.ini (раздел SPLIT_DATA).
+    Если mode=='upload', используется загруженный CSV-файл.
     """
     logger = Logger(SHOW_LOG)
     log = logger.get_logger(__name__)
@@ -124,7 +123,7 @@ def predict_model_func(mode: str, file_contents: bytes = None):
     
     # Загрузка сохранённой модели
     try:
-        model_path = config["CATBOOST"]["path"]
+        model_path = config["RANDOM_FOREST"]["path"]
         with open(model_path, "rb") as f:
             classifier = pickle.load(f)
     except Exception:
@@ -179,3 +178,4 @@ def predict_model_func(mode: str, file_contents: bytes = None):
     
     else:
         raise HTTPException(status_code=400, detail="Неверный режим предсказания. Используйте 'smoke' или 'upload'.")
+
