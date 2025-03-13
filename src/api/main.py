@@ -24,7 +24,7 @@ async def train_model(
     return train_model_func(use_config, max_depth, min_samples_split, predict_flag)
 
 @app.post("/predict/")
-async def predict_model(mode: str, file: UploadFile = None):
+async def predict_model(mode: str = "smoke", file: UploadFile = None):
     if mode == "upload" and file:
         file_contents = await file.read()
         return predict_model_func(mode, file_contents)
