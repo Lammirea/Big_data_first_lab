@@ -1,21 +1,27 @@
-from func import *
+import sys
 from fastapi import FastAPI, UploadFile, File, HTTPException
 import uvicorn
+import os
 
+current_dir = os.path.dirname(__file__)
+parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
+sys.path.insert(0, parent_dir)
+
+from func import *
 
 SHOW_LOG = True
 
-app = FastAPI()
+parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
+sys.path.insert(0, parent_dir)
 
 @app.post("/train/")
 async def train_model(
-    use_config: bool = False,
-    n_estimators: int = 100,
-    max_depth: int = None,
+    use_config: bool = True,
+    max_depth: int = 10,
     min_samples_split: int = 2,
     predict_flag: bool = False
 ):
-    return train_model_func(use_config, n_estimators, max_depth, min_samples_split, predict_flag)
+    return train_model_func(use_config, max_depth, min_samples_split, predict_flag)
 
 @app.post("/predict/")
 async def predict_model(mode: str, file: UploadFile = None):
@@ -29,7 +35,8 @@ async def predict_model(mode: str, file: UploadFile = None):
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
-    config.read("../config.ini")  # Читаем config.ini из корневой папки
+    config_path = os.path.join(current_dir, '..', "config.ini")
+    config.read(config_path, encoding="utf-8")
     try:
         host = config["FASTAPI"]["host"]
         port = config.getint("FASTAPI", "port")
