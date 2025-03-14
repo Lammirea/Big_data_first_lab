@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    privileged: true
+    user: root
+    ports:
+      - 8081:8080
+      - 50000:50000
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./src:/workspace/src  # Подключаем исходники проекта
+    networks:
+      - jenkins_network
+
+volumes:
+  jenkins-data:
+
+networks:
+  jenkins_network:
+    driver: bridge
