@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from imblearn.over_sampling import SMOTE
 from logger import Logger  # Предполагается наличие модуля logger.py
@@ -14,6 +13,9 @@ import traceback
 import pandas as pd
 from sklearn.impute import SimpleImputer
 import numpy as np
+import sys
+import uvicorn
+
 
 SHOW_LOG = True
 
@@ -235,3 +237,34 @@ def predict_model_func(mode: str, file_contents: bytes = None):
 
     else:
         raise HTTPException(status_code=400, detail="Неверный режим. Используйте 'smoke' или 'upload'.")
+
+
+@app.post("/train/")
+async def train_model(
+    use_config: bool = True,
+    max_depth: int = 10,
+    min_samples_split: int = 2,
+    predict_flag: bool = False
+):
+    return train_model_func(use_config, max_depth, min_samples_split, predict_flag)
+
+@app.post("/predict/")
+async def predict_model(mode: str = "smoke", file: UploadFile = None):
+    if mode == "upload" and file:
+        file_contents = await file.read()
+        return predict_model_func(mode, file_contents)
+    elif mode == "smoke":
+        return predict_model_func(mode)
+    else:
+        raise HTTPException(status_code=400, detail="Неверные параметры запроса")
+
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config_path = os.path.join(current_dir, '..', "config.ini")
+    config.read(config_path, encoding="utf-8")
+    try:
+        host = config["FASTAPI"]["host"]
+        port = config.getint("FASTAPI", "port")
+    except KeyError:
+        raise ValueError("В config.ini отсутствует секция [FASTAPI] или ключи host/port")
+    uvicorn.run(app, host=host, port=port)
